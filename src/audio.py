@@ -4,7 +4,7 @@ from openai import OpenAI
 
 from .state import NewsScript
 
-VOICES = {"Agent Anna": "nova", "Agent Sam": "onyx"}
+VOICES = {"Anna": "nova", "Sam": "onyx"}
 TTS_MODEL = "tts-1"
 
 

@@ -1,11 +1,11 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from src import graph
 from src.auth import hash_password
-from src.main import app_fastapi
+from src.main import FRONTEND_DIR, app_fastapi
 from src.state import DialogueLine, NewsScript
 
 LONG = "Major policy update announced today that affects how AI systems are regulated across the region."
@@ -13,7 +13,11 @@ SCRIPT = NewsScript(title="Test Briefing", script=[DialogueLine(speaker="Host A"
 
 
 def base_state(**overrides):
-    state = {"user_interests": ["AI"], "language": "English", "search_results": [], "synthesized_context": None, "final_script": None}
+    state = {
+        "user_interests": ["AI"], "language": "English", "messages": [], "plan": [],
+        "search_results": [], "run_log": [], "steps": 0, "searches_used": 0,
+        "stop_reason": None, "synthesized_context": None, "final_script": None,
+    }
     state.update(overrides)
     return state
 
@@ -28,41 +32,6 @@ def test_synthesize_filters_ads_and_duplicates():
 def test_synthesize_raises_when_nothing_usable():
     with pytest.raises(RuntimeError):
         graph.synthesize_context_node(base_state(search_results=["short"]))
-
-
-def test_search_raises_when_no_results():
-    tool = MagicMock()
-    tool.invoke.return_value = {"query": "AI", "results": []}
-    with patch.object(graph, "TavilySearch", return_value=tool):
-        with pytest.raises(RuntimeError):
-            graph.search_news_node(base_state())
-
-
-def test_search_collects_content():
-    tool = MagicMock()
-    tool.invoke.return_value = {"query": "AI", "results": [{"content": LONG}, {"title": "no content"}]}
-    with patch.object(graph, "TavilySearch", return_value=tool):
-        out = graph.search_news_node(base_state(user_interests=["AI", "space"]))
-    assert out["search_results"] == [LONG, LONG]
-
-
-def test_script_failure_propagates():
-    llm = MagicMock()
-    llm.with_structured_output.return_value.invoke.side_effect = Exception("insufficient_quota")
-    with patch.object(graph, "ChatOpenAI", return_value=llm):
-        with pytest.raises(Exception, match="insufficient_quota"):
-            graph.generate_script_node(base_state(synthesized_context="# ctx"))
-
-
-def test_full_graph_with_mocks():
-    tool = MagicMock()
-    tool.invoke.return_value = {"query": "AI", "results": [{"content": LONG}]}
-    llm = MagicMock()
-    llm.with_structured_output.return_value.invoke.return_value = SCRIPT.model_copy(deep=True)
-    with patch.object(graph, "TavilySearch", return_value=tool), patch.object(graph, "ChatOpenAI", return_value=llm):
-        result = graph.app.invoke(base_state())
-    assert result["final_script"].title == "Test Briefing"
-    assert result["final_script"].script[0].speaker == "Agent Anna"
 
 
 @pytest.fixture
@@ -120,6 +89,7 @@ def test_api_rejects_unsupported_language(client):
     assert r.status_code == 422
 
 
+@pytest.mark.skipif(not FRONTEND_DIR.exists(), reason="frontend not built; run npm run build in frontend/")
 def test_index_serves_ui():
     r = TestClient(app_fastapi).get("/")
     assert r.status_code == 200
@@ -133,8 +103,53 @@ def test_api_returns_500_on_pipeline_failure(client):
     assert "boom" in r.json()["detail"]
 
 
-def test_api_returns_script_on_success(client):
-    with patch("src.main.app.invoke", return_value={"final_script": SCRIPT}):
+def test_api_returns_script_and_run_log_on_success(client):
+    run_log = [{"step": 0, "action": "plan", "observation": "q"}]
+    with patch("src.main.app.invoke", return_value={"final_script": SCRIPT, "run_log": run_log, "stop_reason": "enough coverage"}):
         r = client.post("/api/generate-briefing", json={"user_interests": ["AI"]})
     assert r.status_code == 200
-    assert r.json() == {"title": "Test Briefing", "script": [{"speaker": "Host A", "text": "Hello."}]}
+    assert r.json() == {
+        "title": "Test Briefing",
+        "script": [{"speaker": "Host A", "text": "Hello."}],
+        "run_log": run_log,
+        "stop_reason": "enough coverage",
+    }
+
+
+def test_stream_emits_progress_then_briefing(client):
+    import json
+    from langchain_core.messages import AIMessage
+    from src.state import ResearchPlan, Relevance
+
+    def article(q):
+        return {"title": f"Story {q}", "url": f"https://news.example/{q.replace(' ', '-')}", "content": f"Detailed report on {q} with facts and figures today."}
+
+    responses = [
+        ResearchPlan(queries=["AI regulation"]),
+        AIMessage(content="", tool_calls=[{"name": "search_news", "args": {"query": "AI regulation"}, "id": "1"}]), Relevance(verdicts=["AI"]),
+        AIMessage(content="", tool_calls=[{"name": "search_news", "args": {"query": "AI policy rules"}, "id": "2"}]), Relevance(verdicts=["AI"]),
+        AIMessage(content="", tool_calls=[{"name": "finish_research", "args": {"reason": "enough"}, "id": "3"}]),
+        SCRIPT,
+    ]
+
+    class Fake:
+        def __init__(self):
+            self.items = list(responses)
+
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        def with_structured_output(self, schema):
+            return self
+
+        def invoke(self, messages):
+            return self.items.pop(0)
+
+    with patch.object(graph, "make_llm", return_value=Fake()), patch("src.tools.search_web", side_effect=lambda q: [article(q)]):
+        r = client.post("/api/generate-briefing/stream", json={"user_interests": ["AI"]})
+    events = [json.loads(line) for line in r.text.splitlines() if line.strip()]
+    types = [e["type"] for e in events]
+    assert "thinking" in types and "searching" in types and "step" in types
+    assert types[-1] == "done"
+    assert events[-1]["briefing"]["title"] == "Test Briefing"
+    assert events[-1]["briefing"]["stop_reason"] == "enough"

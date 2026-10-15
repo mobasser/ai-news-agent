@@ -110,13 +110,33 @@ Once the server is running, visit:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
+## Frontend (Next.js)
+
+The web interface lives in `frontend/` and is built with Next.js (App Router, static export) and React.
+
+Build it once, then run the server. FastAPI serves the built files from `frontend/out`:
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+python -m uvicorn src.main:app_fastapi --host 127.0.0.1 --port 8000
+```
+
+For frontend development with hot reload, run the API on port 8000 and then run `npm run dev` inside `frontend/`. The dev server runs on port 3000 and proxies `/api` to the API.
+
 ## Architecture
 
-The agent uses a LangGraph StateGraph with three sequential phases:
+The agent is a LangGraph StateGraph:
 
-1. **search_news_node**: Executes targeted search queries for each user interest with current date context
-2. **synthesize_context_node**: Filters out ads, removes duplicates, and compiles facts into a markdown context block
-3. **generate_script_node**: Uses structured output to generate a two-host conversation script based on the synthesized context
+1. **plan**: an LLM with structured output writes 3 to 5 search queries that cover the user's topics.
+2. **agent** and **tools** loop: the model chooses each action. It can call `search_news` (Tavily, last day of news) or `finish_research` with a reason. Each search result is read back into the model's context before the next decision.
+3. **synthesize_context_node**: Filters out ads, removes duplicates, and compiles facts into a markdown context block.
+4. **generate_script_node**: Uses structured output to generate a two-host conversation script based on the synthesized context.
+
+Budgets are set in `src/graph.py`: `MAX_SEARCHES` (6) and `MAX_STEPS` (10). Repeated queries are rejected without using a search. Every run returns a `run_log` of the plan and each action, with its observation, and a `stop_reason`. The page shows both under "Agent decisions".
+
+Known limits: the agent doesn't check whether each result is on-topic, and it often uses its whole search budget instead of stopping once coverage is enough.
 
 ## Health Check
 
