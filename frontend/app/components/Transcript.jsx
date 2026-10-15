@@ -12,7 +12,9 @@ export default function Transcript({ script, activeLine, rowRefs }) {
             className={`line ${isAnna ? "a" : "b"}${i === activeLine ? " now" : ""}`}
             style={{ animationDelay: `${Math.min(i * 40, 600)}ms` }}
           >
-            <div className="avatar">{isAnna ? "A" : "S"}</div>
+            <div className="avatar">
+              <img src={isAnna ? "/female.png" : "/male.jpg"} alt={line.speaker} />
+            </div>
             <div>
               <div className="who">{line.speaker}</div>
               <div className="text">{line.text}</div>
