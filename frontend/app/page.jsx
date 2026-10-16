@@ -94,8 +94,12 @@ export default function Home() {
 
   async function generate(e) {
     e.preventDefault();
+    if (running) return;
     const topics = commitDraft();
-    if (!topics.length) return;
+    if (!topics.length) {
+      inputRef.current?.focus();
+      return;
+    }
     stopBrowserVoice();
     setError("");
     setNote("");
@@ -173,7 +177,7 @@ export default function Home() {
               <select className="lang" value={language} onChange={(e) => setLanguage(e.target.value)} aria-label="Briefing language">
                 {LANGUAGES.map((l) => <option key={l}>{l}</option>)}
               </select>
-              <button className="btn" type="submit" id="go" disabled={running || pendingTopics().length === 0}>
+              <button className="btn" type="submit" id="go" aria-disabled={running || pendingTopics().length === 0}>
                 {running ? "Working..." : "Generate briefing"}
               </button>
             </div>

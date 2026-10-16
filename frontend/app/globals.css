@@ -94,11 +94,13 @@ h1 {
   z-index: -1; content: ''; position: absolute; width: 100%; height: 100%;
   background: #111; left: 0; top: 0; border-radius: 10px;
 }
-.btn:hover:not(:disabled):before { opacity: 1; }
-.btn:active:not(:disabled) { color: #000; }
-.btn:active:not(:disabled):after { background: transparent; }
-.btn:hover:not(:disabled) { transform: translateY(-1px); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:hover:not([aria-disabled="true"]):before,
+.btn:focus-visible:before { opacity: 1; }
+.btn:focus-visible { outline: 0.5px solid #fff; outline-offset: 2px; }
+.btn:active:not([aria-disabled="true"]) { color: #000; }
+.btn:active:not([aria-disabled="true"]):after { background: transparent; }
+.btn:hover:not([aria-disabled="true"]), .btn:focus-visible { transform: translateY(-1px); }
+.btn[aria-disabled="true"], .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 @keyframes glowing {
   0% { background-position: 0 0; }
   50% { background-position: 400% 0; }
