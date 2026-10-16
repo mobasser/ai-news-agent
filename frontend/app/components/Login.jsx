@@ -23,10 +23,11 @@ export default function Login({ onLogin }) {
   return (
     <div className="login">
       <form className="card login-card" onSubmit={submit}>
-        <h2>Sign in</h2>
+        <h2 className="login-title">Daily <span className="ai-red">AI</span> Briefing</h2>
+        <p className="login-desc">Pick your topics and listen to today's news while you work.</p>
         <input name="username" type="text" placeholder="Username" autoComplete="username" required autoFocus />
         <input name="password" type="password" placeholder="Password" autoComplete="current-password" required />
-        <button className="btn" type="submit" disabled={busy}>Sign in</button>
+        <button className="btn" type="submit" disabled={busy}>Enter</button>
         {error && <div className="error show">{error}</div>}
       </form>
     </div>

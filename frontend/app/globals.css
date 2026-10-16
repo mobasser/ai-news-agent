@@ -200,3 +200,6 @@ h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.12em; color
 
 .avatar { overflow: hidden; padding: 0; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.login-title { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; text-align: center; margin: 0; background: linear-gradient(90deg, #fff, #c4b5fd 45%, #67e8f9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.login-desc { color: var(--muted); font-size: 0.9rem; text-align: center; margin: 0 0 0.4rem; line-height: 1.4; }
